@@ -7,8 +7,8 @@ RUN bun install --frozen-lockfile
 COPY frontend ./
 RUN bun run build
 
-# Build the manager binary
-FROM golang:1.24 AS builder
+# Build the manager binary. Keep this aligned with the Go version in go.mod.
+FROM golang:1.26 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
