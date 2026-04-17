@@ -1,3 +1,12 @@
+FROM oven/bun:1 AS frontend-builder
+WORKDIR /workspace/frontend
+
+COPY frontend/package.json frontend/bun.lock ./
+RUN bun install --frozen-lockfile
+
+COPY frontend ./
+RUN bun run build
+
 # Build the manager binary
 FROM golang:1.24 AS builder
 ARG TARGETOS
@@ -13,6 +22,7 @@ RUN go mod download
 
 # Copy the Go source (relies on .dockerignore to filter)
 COPY . .
+COPY --from=frontend-builder /workspace/frontend/dist /workspace/frontend/dist
 
 # Build
 # the GOARCH has no default value to allow the binary to be built according to the host where the command

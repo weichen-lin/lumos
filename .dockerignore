@@ -9,3 +9,17 @@
 # Re-include Go module files
 !go.mod
 !go.sum
+
+# Re-include frontend files required to build the embedded dashboard
+!frontend/package.json
+!frontend/bun.lock
+!frontend/index.html
+!frontend/biome.json
+!frontend/tsconfig.json
+!frontend/tsconfig.app.json
+!frontend/tsconfig.node.json
+!frontend/vite.config.ts
+!frontend/index.ts
+!frontend/embed.go
+!frontend/public/**
+!frontend/src/**

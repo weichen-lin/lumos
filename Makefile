@@ -1,5 +1,7 @@
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
+BUN ?= bun
+FRONTEND_DIR ?= frontend
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -58,7 +60,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet setup-envtest ## Run tests.
+test: frontend-build manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
@@ -91,7 +93,7 @@ cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
 .PHONY: lint
-lint: golangci-lint ## Run golangci-lint linter
+lint: golangci-lint frontend-check frontend-build ## Run Go and frontend lint/build checks.
 	"$(GOLANGCI_LINT)" run
 
 .PHONY: lint-fix
@@ -104,8 +106,20 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 
 ##@ Build
 
+.PHONY: frontend-install
+frontend-install: ## Install frontend dependencies with Bun.
+	cd $(FRONTEND_DIR) && $(BUN) install --frozen-lockfile
+
+.PHONY: frontend-check
+frontend-check: frontend-install ## Run frontend checks.
+	cd $(FRONTEND_DIR) && $(BUN) run check
+
+.PHONY: frontend-build
+frontend-build: frontend-install ## Build the frontend bundle used by the embedded dashboard.
+	cd $(FRONTEND_DIR) && $(BUN) run build
+
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
+build: frontend-build manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
 .PHONY: run
@@ -114,7 +128,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 
 .PHONY: dev
 dev: ## Build frontend then run the controller (dashboard at :8090).
-	cd frontend && npm run build
+	cd $(FRONTEND_DIR) && $(BUN) run build
 	go run ./cmd/main.go
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
@@ -148,8 +162,11 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
-	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
-	"$(KUSTOMIZE)" build config/default > dist/install.yaml
+	tmpdir="$$(mktemp -d)"; \
+	cp -R config "$$tmpdir/config"; \
+	cd "$$tmpdir/config/manager" && "$(KUSTOMIZE)" edit set image controller=${IMG}; \
+	"$(KUSTOMIZE)" build "$$tmpdir/config/default" > "$(CURDIR)/dist/install.yaml"; \
+	rm -rf "$$tmpdir"
 
 ##@ Deployment
 

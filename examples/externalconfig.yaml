@@ -1,0 +1,18 @@
+apiVersion: sync.lumos.io/v1alpha1
+kind: ExternalConfig
+metadata:
+  name: app-config
+  namespace: default
+spec:
+  storeRef:
+    name: my-git-store
+    kind: ConfigStore
+  refreshInterval: 5m
+  data:
+    - source: config/app.yaml
+      key: app.yaml
+      format: Raw
+    - source: config/env.json
+      format: Env
+  target:
+    name: app-configmap

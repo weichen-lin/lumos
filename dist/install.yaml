@@ -1,0 +1,869 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: lumos
+    control-plane: controller-manager
+  name: lumos-system
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: clusterconfigstores.sync.lumos.io
+spec:
+  group: sync.lumos.io
+  names:
+    kind: ClusterConfigStore
+    listKind: ClusterConfigStoreList
+    plural: clusterconfigstores
+    singular: clusterconfigstore
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.provider
+      name: Provider
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ClusterConfigStore is the Schema for the clusterconfigstores API.
+          It is cluster-scoped and can be referenced from any namespace.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ConfigStoreSpec defines the desired state of ConfigStore.
+            properties:
+              git:
+                description: git configures the Git backend. Required when provider
+                  is Git.
+                properties:
+                  branch:
+                    default: main
+                    description: branch to track. Defaults to "main".
+                    type: string
+                  secretRef:
+                    description: |-
+                      secretRef points to a Secret containing credentials.
+                      For HTTPS: keys "username" and "password" (or "token").
+                      For SSH: key "sshPrivateKey".
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  url:
+                    description: url is the HTTPS or SSH URL of the repository.
+                    type: string
+                required:
+                - url
+                type: object
+                x-kubernetes-validations:
+                - message: secretRef is required when using an SSH URL (git@...)
+                  rule: '!self.url.startsWith(''git@'') || has(self.secretRef)'
+              provider:
+                description: provider selects the backend type for this store.
+                enum:
+                - Git
+                type: string
+            required:
+            - provider
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: configstores.sync.lumos.io
+spec:
+  group: sync.lumos.io
+  names:
+    kind: ConfigStore
+    listKind: ConfigStoreList
+    plural: configstores
+    singular: configstore
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.provider
+      name: Provider
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ConfigStore is the Schema for the configstores API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ConfigStoreSpec defines the desired state of ConfigStore.
+            properties:
+              git:
+                description: git configures the Git backend. Required when provider
+                  is Git.
+                properties:
+                  branch:
+                    default: main
+                    description: branch to track. Defaults to "main".
+                    type: string
+                  secretRef:
+                    description: |-
+                      secretRef points to a Secret containing credentials.
+                      For HTTPS: keys "username" and "password" (or "token").
+                      For SSH: key "sshPrivateKey".
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  url:
+                    description: url is the HTTPS or SSH URL of the repository.
+                    type: string
+                required:
+                - url
+                type: object
+                x-kubernetes-validations:
+                - message: secretRef is required when using an SSH URL (git@...)
+                  rule: '!self.url.startsWith(''git@'') || has(self.secretRef)'
+              provider:
+                description: provider selects the backend type for this store.
+                enum:
+                - Git
+                type: string
+            required:
+            - provider
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: encryptedsecrets.sync.lumos.io
+spec:
+  group: sync.lumos.io
+  names:
+    kind: EncryptedSecret
+    listKind: EncryptedSecretList
+    plural: encryptedsecrets
+    singular: encryptedsecret
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.storeRef.name
+      name: Store
+      type: string
+    - jsonPath: .spec.target.name
+      name: Target
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .status.syncedAt
+      name: Synced At
+      type: date
+    - jsonPath: .status.observedVersion
+      name: Version
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          EncryptedSecret syncs SOPS-encrypted files from a Git repository and writes
+          the decrypted key-value pairs into a Kubernetes Secret.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: EncryptedSecretSpec defines the desired state of EncryptedSecret.
+            properties:
+              ageKeyRef:
+                description: |-
+                  AgeKeyRef is the name of the K8s Secret in the same namespace that contains
+                  the age private key under the "keys.txt" data key (AGE-SECRET-KEY-...).
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
+              data:
+                description: |-
+                  Data lists the SOPS-encrypted files to read from the Git store.
+                  Each file is decrypted and its top-level keys are written into the target Secret.
+                items:
+                  description: EncryptedSecretData references a single SOPS-encrypted
+                    file in the Git repository.
+                  properties:
+                    source:
+                      description: |-
+                        Source is the file path in the Git repository (e.g. "secrets/app.yaml").
+                        The file must be SOPS-encrypted with the age key referenced by AgeKeyRef.
+                      type: string
+                  required:
+                  - source
+                  type: object
+                maxItems: 20
+                minItems: 1
+                type: array
+              refreshInterval:
+                default: 5m
+                description: RefreshInterval defines how often to re-sync from the
+                  Git store.
+                type: string
+              storeRef:
+                description: StoreRef points to the ConfigStore (Git provider) that
+                  holds the encrypted files.
+                properties:
+                  kind:
+                    default: ConfigStore
+                    description: |-
+                      kind of the store. Either ConfigStore or ClusterConfigStore.
+                      Defaults to ConfigStore.
+                    enum:
+                    - ConfigStore
+                    - ClusterConfigStore
+                    type: string
+                  name:
+                    description: name of the ConfigStore or ClusterConfigStore.
+                    type: string
+                required:
+                - name
+                type: object
+              target:
+                description: Target defines the output K8s Secret. Defaults to the
+                  EncryptedSecret name.
+                properties:
+                  name:
+                    description: Name of the K8s Secret to create. Defaults to the
+                      EncryptedSecret name.
+                    type: string
+                type: object
+            required:
+            - ageKeyRef
+            - data
+            - storeRef
+            type: object
+          status:
+            description: EncryptedSecretStatus defines the observed state of EncryptedSecret.
+            properties:
+              conditions:
+                description: Conditions reflect the current state. The "Ready" condition
+                  tracks sync health.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              observedVersion:
+                description: ObservedVersion is the Git commit SHA of the last successful
+                  sync.
+                type: string
+              syncedAt:
+                description: SyncedAt is the timestamp of the last successful sync.
+                format: date-time
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: externalconfigs.sync.lumos.io
+spec:
+  group: sync.lumos.io
+  names:
+    kind: ExternalConfig
+    listKind: ExternalConfigList
+    plural: externalconfigs
+    singular: externalconfig
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.storeRef.name
+      name: Store
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.syncedAt
+      name: Synced At
+      type: date
+    - jsonPath: .status.observedVersion
+      name: Version
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ExternalConfig is the Schema for the externalconfigs API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ExternalConfigSpec defines the desired state of ExternalConfig.
+            properties:
+              data:
+                description: data lists the remote keys to sync and their local names.
+                items:
+                  description: ExternalConfigData maps one remote path/key to one
+                    or more local ConfigMap keys.
+                  properties:
+                    format:
+                      default: Raw
+                      description: |-
+                        format controls how the fetched value is written to the ConfigMap.
+                        Raw (default): the entire value is stored under key.
+                        Env: the value is parsed as flat JSON or .env and each entry is stored
+                        as a separate ConfigMap key.
+                      enum:
+                      - Raw
+                      - Env
+                      type: string
+                    key:
+                      description: |-
+                        key is the ConfigMap key name. Required when format=Raw.
+                        Must be empty when format=Env.
+                      maxLength: 253
+                      type: string
+                    source:
+                      description: |-
+                        source is the path or key in the remote source.
+                        For Git: relative file path, e.g. "config/app.yaml".
+                      maxLength: 2048
+                      type: string
+                  required:
+                  - source
+                  type: object
+                  x-kubernetes-validations:
+                  - message: key is required when format is Raw
+                    rule: self.format != 'Raw' || has(self.key)
+                  - message: key must be empty when format is Env
+                    rule: self.format != 'Env' || !has(self.key)
+                  - message: key must consist of alphanumeric characters, '-', '_'
+                      or '.'
+                    rule: '!has(self.key) || self.key.matches(''^[-._a-zA-Z0-9]+$'')'
+                maxItems: 100
+                minItems: 1
+                type: array
+              refreshInterval:
+                default: 5m
+                description: |-
+                  refreshInterval controls how often the operator re-syncs.
+                  Must be a valid Go duration string, e.g. "5m", "1h".
+                type: string
+              storeRef:
+                description: storeRef references the ConfigStore to pull config from.
+                properties:
+                  kind:
+                    default: ConfigStore
+                    description: |-
+                      kind of the store. Either ConfigStore or ClusterConfigStore.
+                      Defaults to ConfigStore.
+                    enum:
+                    - ConfigStore
+                    - ClusterConfigStore
+                    type: string
+                  name:
+                    description: name of the ConfigStore or ClusterConfigStore.
+                    type: string
+                required:
+                - name
+                type: object
+              target:
+                description: |-
+                  target defines where the synced config is written.
+                  Defaults to a ConfigMap with the same name as this ExternalConfig.
+                properties:
+                  name:
+                    description: |-
+                      name of the ConfigMap to create or update.
+                      Defaults to the ExternalConfig name if omitted.
+                    type: string
+                type: object
+            required:
+            - data
+            - refreshInterval
+            - storeRef
+            type: object
+          status:
+            description: ExternalConfigStatus defines the observed state of ExternalConfig.
+            properties:
+              conditions:
+                description: |-
+                  conditions represent the current sync state.
+                  "Ready" = True means the last sync succeeded.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              keyMappings:
+                description: |-
+                  keyMappings records which remote key produced which ConfigMap keys.
+                  Populated after each successful sync.
+                items:
+                  description: KeyMapping records which ConfigMap keys were produced
+                    by one remote data entry.
+                  properties:
+                    keys:
+                      description: keys are the ConfigMap keys written for this entry.
+                      items:
+                        type: string
+                      type: array
+                    source:
+                      description: source is the source path or KV key.
+                      type: string
+                  required:
+                  - keys
+                  - source
+                  type: object
+                type: array
+              observedVersion:
+                description: |-
+                  observedVersion is a provider-specific version string
+                  (commit SHA for Git).
+                type: string
+              syncedAt:
+                description: syncedAt is the timestamp of the last successful sync.
+                format: date-time
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lumos-controller-manager
+  namespace: lumos-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lumos-leader-election-role
+  namespace: lumos-system
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lumos-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - sync.lumos.io
+  resources:
+  - clusterconfigstores
+  - configstores
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - sync.lumos.io
+  resources:
+  - encryptedsecrets
+  - externalconfigs
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - sync.lumos.io
+  resources:
+  - encryptedsecrets/status
+  - externalconfigs/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lumos-leader-election-rolebinding
+  namespace: lumos-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: lumos-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: lumos-controller-manager
+  namespace: lumos-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lumos-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: lumos-manager-role
+subjects:
+- kind: ServiceAccount
+  name: lumos-controller-manager
+  namespace: lumos-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: lumos
+    control-plane: controller-manager
+  name: lumos-controller-manager-metrics-service
+  namespace: lumos-system
+spec:
+  ports:
+  - name: https
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
+  selector:
+    app.kubernetes.io/name: lumos
+    control-plane: controller-manager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: lumos
+    control-plane: controller-manager
+  name: lumos-controller-manager
+  namespace: lumos-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lumos
+      control-plane: controller-manager
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app.kubernetes.io/name: lumos
+        control-plane: controller-manager
+    spec:
+      containers:
+      - args:
+        - --metrics-bind-address=:8443
+        - --leader-elect
+        - --health-probe-bind-address=:8081
+        command:
+        - /manager
+        image: controller:latest
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        ports: []
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts: []
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: lumos-controller-manager
+      terminationGracePeriodSeconds: 10
+      volumes: []

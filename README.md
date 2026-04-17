@@ -1,53 +1,64 @@
 <div align="center">
   <img src="frontend/public/favicon.svg" width="100" height="100" alt="Lumos" />
   <h1>Lumos</h1>
-  <p>Kubernetes-native configuration management — sync external configs into ConfigMaps, declaratively.</p>
+  <p>Kubernetes-native configuration management for syncing Git-backed config into ConfigMaps and Secrets.</p>
 </div>
 
 ---
 
-Lumos is a Kubernetes operator that pulls configuration from **Git repositories** and keeps your ConfigMaps in sync. Define what you want with two CRDs; Lumos handles the rest.
+Lumos is a Kubernetes operator that pulls configuration from Git repositories and keeps Kubernetes resources in sync declaratively.
+
+It currently supports:
+
+- `ConfigStore` and `ClusterConfigStore` for connecting to Git repositories
+- `ExternalConfig` for syncing files into `ConfigMap`
+- `EncryptedSecret` for decrypting SOPS-encrypted files and syncing them into `Secret`
+- A built-in dashboard and API for inspecting stores and sync status
 
 ## Features
 
-- **Git-native**: Git (HTTPS/SSH) as the configuration source
-- **Namespace & cluster scoped**: `ConfigStore` (namespaced) and `ClusterConfigStore` (cluster-wide)
-- **Flexible format**: `Raw` for full-file storage, `Env` for flat key/value parsing
-- **Encrypted secrets**: SOPS integration for sensitive data
-- **Automatic refresh**: configurable `refreshInterval` per `ExternalConfig`
-- **Web dashboard**: built-in React UI for visibility into sync status and config stores
+- Git as the source of truth over HTTPS or SSH
+- Namespace-scoped and cluster-scoped stores
+- `Raw` and `Env` data mapping modes
+- SOPS + Age decryption for encrypted secrets
+- Configurable per-resource refresh intervals
+- Built-in dashboard for operators and developers
 
-## How It Works
+## Architecture
 
+```text
+ConfigStore / ClusterConfigStore
+              |
+              v
+         Git provider
+          /       \
+         v         v
+ExternalConfig  EncryptedSecret
+      |               |
+      v               v
+ ConfigMap         Secret
 ```
-ConfigStore ──► provider (Git)
-     │
-     └── ExternalConfig ──► ConfigMap
-             (refreshInterval, data mappings)
-```
-
-1. Create a `ConfigStore` pointing at your Git repo.
-2. Create an `ExternalConfig` referencing that store, listing which files/keys to sync.
-3. Lumos creates and keeps a `ConfigMap` up to date on every `refreshInterval`.
 
 ## Quick Start
 
-### 1. Install CRDs
+### 1. Install the CRDs
 
 ```bash
 make install
 ```
 
-### 2. Run the operator
+### 2. Run Lumos locally
 
 ```bash
 make run
 ```
 
-### 3. Create a ConfigStore
+The dashboard API and embedded frontend are served at `http://localhost:8090`.
+
+### 3. Create a Git-backed store
 
 ```yaml
-apiVersion: lumos.io/v1alpha1
+apiVersion: sync.lumos.io/v1alpha1
 kind: ConfigStore
 metadata:
   name: my-git-store
@@ -58,13 +69,27 @@ spec:
     url: https://github.com/my-org/config-repo
     branch: main
     secretRef:
-      name: git-credentials   # Secret with keys: username, password (or token)
+      name: git-credentials
 ```
 
-### 4. Sync configuration with ExternalConfig
+Credential secret example:
 
 ```yaml
-apiVersion: lumos.io/v1alpha1
+apiVersion: v1
+kind: Secret
+metadata:
+  name: git-credentials
+  namespace: default
+type: Opaque
+stringData:
+  username: git
+  password: <token-or-password>
+```
+
+### 4. Sync a ConfigMap with ExternalConfig
+
+```yaml
+apiVersion: sync.lumos.io/v1alpha1
 kind: ExternalConfig
 metadata:
   name: app-config
@@ -75,86 +100,25 @@ spec:
     kind: ConfigStore
   refreshInterval: 5m
   data:
-    - source: config/app.yaml   # path in the Git repo
-      key: app.yaml             # key in the resulting ConfigMap
+    - source: config/app.yaml
+      key: app.yaml
       format: Raw
-    - source: config/env.json   # parsed as flat key/value pairs
+    - source: config/env.json
       format: Env
   target:
-    name: app-configmap         # defaults to ExternalConfig name if omitted
+    name: app-configmap
 ```
 
-The resulting `ConfigMap` is created (or updated) in the same namespace. Check sync status:
+Check sync status:
 
 ```bash
-kubectl get externalconfig app-config -o wide
-# NAME          STORE           READY   SYNCED AT              VERSION
-# app-config    my-git-store    True    2026-04-17T10:00:00Z   a1b2c3d
+kubectl get externalconfig app-config -n default -o wide
 ```
 
-## API Reference
-
-### ConfigStore / ClusterConfigStore
-
-| Field | Description |
-|---|---|
-| `spec.provider` | `Git` |
-| `spec.git.url` | HTTPS or SSH repo URL |
-| `spec.git.branch` | Branch to track (default: `main`) |
-| `spec.git.secretRef` | Secret with `username`+`password`/`token` or `sshPrivateKey` |
-
-### ExternalConfig
-
-| Field | Description |
-|---|---|
-| `spec.storeRef.name` | ConfigStore or ClusterConfigStore name |
-| `spec.storeRef.kind` | `ConfigStore` (default) or `ClusterConfigStore` |
-| `spec.refreshInterval` | How often to re-sync, e.g. `5m`, `1h` |
-| `spec.data[].source` | File path in the Git repo |
-| `spec.data[].key` | ConfigMap key name (required for `Raw` format) |
-| `spec.data[].format` | `Raw` (default) or `Env` |
-| `spec.target.name` | ConfigMap name (defaults to ExternalConfig name) |
-
-## Encrypted Secrets (SOPS + Age)
-
-Lumos can decrypt SOPS-encrypted files from Git and write the plaintext key-value pairs into a Kubernetes `Secret`.
-
-### How it works
-
-```
-ConfigStore (Git) ──► EncryptedSecret ──► K8s Secret
-                           │
-                    age key (K8s Secret)
-```
-
-1. Store your SOPS-encrypted files (`.yaml`, `.json`, `.env`, `.ini`) in Git.
-2. Create a K8s Secret containing your age private key under the `keys.txt` data key.
-3. Create an `EncryptedSecret` referencing the store, the age key, and the files to decrypt.
-
-### 1. Encrypt a file with SOPS + Age
-
-```bash
-# Generate an age key pair
-age-keygen -o age.agekey
-
-# Encrypt a secret file
-sops --encrypt --age $(grep "public key" age.agekey | awk '{print $NF}') secrets/app.yaml > secrets/app.enc.yaml
-
-# Commit the encrypted file
-git add secrets/app.enc.yaml && git commit -m "add encrypted secrets"
-```
-
-### 2. Store the age private key in Kubernetes
-
-```bash
-kubectl create secret generic age-key \
-  --from-file=keys.txt=age.agekey
-```
-
-### 3. Create an EncryptedSecret
+### 5. Sync a Secret with EncryptedSecret
 
 ```yaml
-apiVersion: lumos.io/v1alpha1
+apiVersion: sync.lumos.io/v1alpha1
 kind: EncryptedSecret
 metadata:
   name: app-secrets
@@ -164,41 +128,140 @@ spec:
     name: my-git-store
     kind: ConfigStore
   ageKeyRef:
-    name: age-key           # K8s Secret containing keys.txt
+    name: age-key
   refreshInterval: 5m
   data:
     - source: secrets/app.enc.yaml
   target:
-    name: app-secret        # K8s Secret to create (defaults to EncryptedSecret name)
+    name: app-secret
 ```
 
-Lumos decrypts each file and merges all top-level keys into the target `Secret`.
+Lumos reads the SOPS-encrypted file from Git, decrypts it with the Age private key stored in Kubernetes, and writes the merged top-level keys into the target `Secret`.
+
+## Example Manifests
+
+Ready-to-apply examples live in [`examples/`](examples/).
+
+Suggested apply order:
 
 ```bash
-kubectl get encryptedsecret app-secrets -o wide
-# NAME          STORE           TARGET       READY   SYNCED AT              VERSION
-# app-secrets   my-git-store    app-secret   True    2026-04-17T10:00:00Z   a1b2c3d
+kubectl apply -f examples/git-credentials-secret.example.yaml
+kubectl apply -f examples/configstore.yaml
+kubectl apply -f examples/externalconfig.yaml
 ```
 
-### EncryptedSecret API Reference
+For encrypted secrets:
+
+```bash
+kubectl apply -f examples/age-key-secret.example.yaml
+kubectl apply -f examples/encryptedsecret.yaml
+```
+
+## API Reference
+
+### ConfigStore / ClusterConfigStore
 
 | Field | Description |
 |---|---|
-| `spec.storeRef.name` | ConfigStore or ClusterConfigStore name |
-| `spec.storeRef.kind` | `ConfigStore` (default) or `ClusterConfigStore` |
-| `spec.ageKeyRef.name` | K8s Secret containing the age private key under `keys.txt` |
-| `spec.refreshInterval` | How often to re-sync, e.g. `5m`, `1h` (default: `5m`) |
-| `spec.data[].source` | Path to a SOPS-encrypted file in the Git repo |
-| `spec.target.name` | K8s Secret name to write decrypted data into (defaults to `EncryptedSecret` name) |
+| `spec.provider` | Currently `Git` |
+| `spec.git.url` | HTTPS or SSH repository URL |
+| `spec.git.branch` | Branch to track, defaults to `main` |
+| `spec.git.secretRef` | Secret with `username` + `password`/`token`, or `sshPrivateKey` |
+
+### ExternalConfig
+
+| Field | Description |
+|---|---|
+| `spec.storeRef.name` | Referenced `ConfigStore` or `ClusterConfigStore` name |
+| `spec.storeRef.kind` | `ConfigStore` or `ClusterConfigStore`, defaults to `ConfigStore` |
+| `spec.refreshInterval` | Re-sync interval such as `5m` or `1h` |
+| `spec.data[].source` | File path in the Git repository |
+| `spec.data[].key` | Required when `format: Raw` |
+| `spec.data[].format` | `Raw` or `Env` |
+| `spec.target.name` | Output `ConfigMap` name, defaults to resource name |
+
+### EncryptedSecret
+
+| Field | Description |
+|---|---|
+| `spec.storeRef.name` | Referenced `ConfigStore` or `ClusterConfigStore` name |
+| `spec.storeRef.kind` | `ConfigStore` or `ClusterConfigStore`, defaults to `ConfigStore` |
+| `spec.ageKeyRef.name` | Secret containing the Age private key in `keys.txt` |
+| `spec.refreshInterval` | Re-sync interval such as `5m` or `1h`, defaults to `5m` |
+| `spec.data[].source` | Path to a SOPS-encrypted file in the Git repository |
+| `spec.target.name` | Output `Secret` name, defaults to resource name |
+
+## SOPS + Age Workflow
+
+### 1. Generate an Age key pair
+
+```bash
+age-keygen -o age.agekey
+```
+
+### 2. Encrypt a file with SOPS
+
+```bash
+sops --encrypt --age $(grep "public key" age.agekey | awk '{print $NF}') secrets/app.yaml > secrets/app.enc.yaml
+```
+
+### 3. Store the private key in Kubernetes
+
+```bash
+kubectl create secret generic age-key \
+  --from-file=keys.txt=age.agekey \
+  -n default
+```
+
+### 4. Apply EncryptedSecret
+
+```bash
+kubectl apply -f examples/encryptedsecret.yaml
+kubectl get encryptedsecret app-secrets -n default -o wide
+```
 
 ## Dashboard
 
-Lumos ships a web dashboard for inspecting config stores and sync state.
+When Lumos is running locally:
 
 ```bash
-# Start the API server + dashboard
 make run
-# Open http://localhost:8080
+```
+
+Open `http://localhost:8090`.
+
+## Development
+
+### Common commands
+
+```bash
+make generate manifests
+make run
+make test
+make docker-build IMG=lumos:dev
+make build-installer
+```
+
+### Frontend-only development
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Release Workflow
+
+Build the install manifest:
+
+```bash
+make build-installer
+```
+
+This generates [`dist/install.yaml`](dist/install.yaml), which is the file you can attach to a GitHub release or publish for one-command installation:
+
+```bash
+kubectl apply -f <release-install-yaml-url>
 ```
 
 ## Tech Stack
@@ -208,21 +271,8 @@ make run
 | Operator | Go, Kubebuilder v4, controller-runtime |
 | Providers | go-git |
 | Encryption | SOPS |
-| Frontend | React 19, TypeScript, Vite, TailwindCSS, Radix UI |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, Radix UI |
 | Testing | Ginkgo v2, Gomega |
-
-## Development
-
-```bash
-# Generate CRD manifests and deepcopy
-make generate manifests
-
-# Run tests
-make test
-
-# Build the Docker image
-make docker-build IMG=lumos:dev
-```
 
 ## License
 

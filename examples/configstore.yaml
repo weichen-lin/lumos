@@ -1,0 +1,12 @@
+apiVersion: sync.lumos.io/v1alpha1
+kind: ConfigStore
+metadata:
+  name: my-git-store
+  namespace: default
+spec:
+  provider: Git
+  git:
+    url: https://github.com/my-org/config-repo
+    branch: main
+    secretRef:
+      name: git-credentials
