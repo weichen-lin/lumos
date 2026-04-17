@@ -48,35 +48,6 @@ spec:
           spec:
             description: ConfigStoreSpec defines the desired state of ConfigStore.
             properties:
-              consul:
-                description: consul configures the Consul backend. Required when provider
-                  is Consul.
-                properties:
-                  address:
-                    description: address of the Consul agent, e.g. "consul.default.svc:8500".
-                    type: string
-                  prefix:
-                    description: prefix is the KV path prefix to read from, e.g. "config/myapp".
-                    type: string
-                  secretRef:
-                    description: secretRef points to a Secret with key "token" for
-                      ACL auth.
-                    properties:
-                      name:
-                        default: ""
-                        description: |-
-                          Name of the referent.
-                          This field is effectively required, but due to backwards compatibility is
-                          allowed to be empty. Instances of this type with an empty value here are
-                          almost certainly wrong.
-                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                        type: string
-                    type: object
-                    x-kubernetes-map-type: atomic
-                required:
-                - address
-                - prefix
-                type: object
               git:
                 description: git configures the Git backend. Required when provider
                   is Git.
@@ -115,7 +86,6 @@ spec:
                 description: provider selects the backend type for this store.
                 enum:
                 - Git
-                - Consul
                 type: string
             required:
             - provider

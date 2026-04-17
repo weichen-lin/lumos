@@ -5,9 +5,7 @@ import {
 	AlertTriangle,
 	CheckCircle2,
 	ChevronLeft,
-	Cloud,
 	GitBranch,
-	Server,
 } from "lucide-react";
 import { useConfigStoreDetailData } from "../hooks/useConfigStoreDetailData";
 import { formatAgo } from "../lib/time";
@@ -188,12 +186,6 @@ export function ConfigStoreDetail({ storeId }: { storeId: string }) {
 									<InfoRow label="Branch" value={data.git.branch} mono />
 								</>
 							)}
-							{data.consul && (
-								<>
-									<InfoRow label="Address" value={data.consul.address} mono />
-									<InfoRow label="Prefix" value={data.consul.prefix} mono />
-								</>
-							)}
 						</CardContent>
 					</Card>
 				</div>
@@ -225,10 +217,8 @@ function InfoRow({
 	);
 }
 
-function ProviderIcon({ provider }: { provider: "Git" | "Consul" }) {
+function ProviderIcon({ provider }: { provider: "Git" }) {
 	if (provider === "Git")
 		return <GitBranch size={14} className="text-primary/70" />;
-	if (provider === "Consul")
-		return <Server size={14} className="text-primary/70" />;
-	return <Cloud size={14} className="text-primary/70" />;
+	return <GitBranch size={14} className="text-primary/70" />;
 }

@@ -5,11 +5,6 @@ export interface GitInfo {
 	branch: string;
 }
 
-export interface ConsulInfo {
-	address: string;
-	prefix: string;
-}
-
 export interface EcRef {
 	uid: string;
 	id: string;
@@ -23,10 +18,9 @@ export interface ConfigStoreDetail {
 	id: string;
 	name: string;
 	type: "ConfigStore" | "ClusterConfigStore";
-	provider: "Git" | "Consul";
+	provider: "Git";
 	namespace?: string;
 	git?: GitInfo;
-	consul?: ConsulInfo;
 	externalConfigs: EcRef[];
 }
 

@@ -5,7 +5,7 @@ export interface ConfigStore {
 	id: string;
 	name: string;
 	type: "ConfigStore" | "ClusterConfigStore";
-	provider: "Git" | "Consul";
+	provider: "Git";
 	namespace?: string;
 	usageCount: number;
 }

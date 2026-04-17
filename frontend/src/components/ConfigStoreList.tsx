@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { Cloud, Database, GitBranch, Search, Server } from "lucide-react";
+import { Database, GitBranch, Search } from "lucide-react";
 import { useState } from "react";
 import {
 	type ConfigStore,
@@ -168,15 +168,9 @@ function ProviderIcon({ provider }: { provider: ConfigStore["provider"] }) {
 				<GitBranch size={16} className="text-foreground/70" />
 			</div>
 		);
-	if (provider === "Consul")
-		return (
-			<div className="p-1.5 bg-white/10 rounded-md shrink-0 flex items-center justify-center w-8 h-8">
-				<Server size={16} className="text-foreground/70" />
-			</div>
-		);
 	return (
 		<div className="p-1.5 bg-white/10 rounded-md shrink-0 flex items-center justify-center w-8 h-8">
-			<Cloud size={16} className="text-foreground/70" />
+			<GitBranch size={16} className="text-foreground/70" />
 		</div>
 	);
 }

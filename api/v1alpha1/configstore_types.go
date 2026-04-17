@@ -22,12 +22,11 @@ import (
 )
 
 // ConfigStoreProvider defines which backend this store connects to.
-// +kubebuilder:validation:Enum=Git;Consul
+// +kubebuilder:validation:Enum=Git
 type ConfigStoreProvider string
 
 const (
-	ProviderGit    ConfigStoreProvider = "Git"
-	ProviderConsul ConfigStoreProvider = "Consul"
+	ProviderGit ConfigStoreProvider = "Git"
 )
 
 // GitProvider holds connection details for a Git repository.
@@ -49,21 +48,6 @@ type GitProvider struct {
 	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
 }
 
-// ConsulProvider holds connection details for a Consul KV store.
-type ConsulProvider struct {
-	// address of the Consul agent, e.g. "consul.default.svc:8500".
-	// +kubebuilder:validation:Required
-	Address string `json:"address"`
-
-	// prefix is the KV path prefix to read from, e.g. "config/myapp".
-	// +kubebuilder:validation:Required
-	Prefix string `json:"prefix"`
-
-	// secretRef points to a Secret with key "token" for ACL auth.
-	// +optional
-	SecretRef *corev1.LocalObjectReference `json:"secretRef,omitempty"`
-}
-
 // ConfigStoreSpec defines the desired state of ConfigStore.
 type ConfigStoreSpec struct {
 	// provider selects the backend type for this store.
@@ -73,10 +57,6 @@ type ConfigStoreSpec struct {
 	// git configures the Git backend. Required when provider is Git.
 	// +optional
 	Git *GitProvider `json:"git,omitempty"`
-
-	// consul configures the Consul backend. Required when provider is Consul.
-	// +optional
-	Consul *ConsulProvider `json:"consul,omitempty"`
 }
 
 // +kubebuilder:object:root=true

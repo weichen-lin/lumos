@@ -8,14 +8,12 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	Clock,
-	Cloud,
 	Copy,
 	Eye,
 	FileCode2,
 	GitBranch,
 	GitCommit,
 	Maximize2,
-	Server,
 	X,
 } from "lucide-react";
 import { useState } from "react";
@@ -494,14 +492,8 @@ function ValueModal({
 	);
 }
 
-function ProviderIconCompact({
-	provider,
-}: {
-	provider: "Git" | "Consul" | "Unknown";
-}) {
+function ProviderIconCompact({ provider }: { provider: "Git" | "Unknown" }) {
 	if (provider === "Git")
 		return <GitBranch size={14} className="text-primary/70" />;
-	if (provider === "Consul")
-		return <Server size={14} className="text-primary/70" />;
-	return <Cloud size={14} className="text-primary/70" />;
+	return <GitBranch size={14} className="text-primary/70" />;
 }

@@ -54,7 +54,6 @@ const (
 type ExternalConfigData struct {
 	// source is the path or key in the remote source.
 	// For Git: relative file path, e.g. "config/app.yaml".
-	// For Consul: KV key relative to the store prefix.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MaxLength=2048
 	Source string `json:"source"`
@@ -126,7 +125,7 @@ type ExternalConfigStatus struct {
 	SyncedAt *metav1.Time `json:"syncedAt,omitempty"`
 
 	// observedVersion is a provider-specific version string
-	// (commit SHA for Git, ModifyIndex for Consul).
+	// (commit SHA for Git).
 	// +optional
 	ObservedVersion string `json:"observedVersion,omitempty"`
 

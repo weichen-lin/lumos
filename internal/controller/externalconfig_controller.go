@@ -209,16 +209,6 @@ func (r *ExternalConfigReconciler) buildProvider(
 		}
 		return provider.NewGit(store.Git.URL, store.Git.Branch, auth), nil
 
-	case syncv1alpha1.ProviderConsul:
-		if store.Consul == nil {
-			return nil, fmt.Errorf("store %q has provider Consul but no consul config", ec.Spec.StoreRef.Name)
-		}
-		token, err := r.resolveConsulToken(ctx, ec.Namespace, store.Consul)
-		if err != nil {
-			return nil, err
-		}
-		return provider.NewConsul(store.Consul.Address, store.Consul.Prefix, token), nil
-
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", store.Provider)
 	}
@@ -231,31 +221,6 @@ func (r *ExternalConfigReconciler) resolveGitAuth(
 	cfg *syncv1alpha1.GitProvider,
 ) (*provider.GitAuth, error) {
 	return resolveGitAuthFromClient(ctx, r.Client, namespace, cfg)
-}
-
-// resolveConsulToken reads the ACL token from the referenced Secret (if any).
-func (r *ExternalConfigReconciler) resolveConsulToken(
-	ctx context.Context,
-	namespace string,
-	cfg *syncv1alpha1.ConsulProvider,
-) (string, error) {
-	if cfg.SecretRef == nil {
-		return "", nil
-	}
-
-	var secret corev1.Secret
-	if err := r.Get(ctx, types.NamespacedName{
-		Name:      cfg.SecretRef.Name,
-		Namespace: namespace,
-	}, &secret); err != nil {
-		return "", fmt.Errorf("reading consul secret %q: %w", cfg.SecretRef.Name, err)
-	}
-
-	token, ok := secret.Data["token"]
-	if !ok {
-		return "", fmt.Errorf("secret %q has no key \"token\"", cfg.SecretRef.Name)
-	}
-	return string(token), nil
 }
 
 // setFailed marks the ExternalConfig as not-Ready and requeues after refreshInterval.

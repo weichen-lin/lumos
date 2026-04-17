@@ -38,7 +38,7 @@ type FetchResult struct {
 	Data map[string]string
 
 	// Version is a provider-specific version identifier
-	// (commit SHA for Git, ModifyIndex string for Consul).
+	// (commit SHA for Git).
 	Version string
 
 	// Mappings records which source path/key produced which local ConfigMap keys.

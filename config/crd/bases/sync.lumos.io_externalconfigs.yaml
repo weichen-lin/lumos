@@ -82,7 +82,6 @@ spec:
                       description: |-
                         source is the path or key in the remote source.
                         For Git: relative file path, e.g. "config/app.yaml".
-                        For Consul: KV key relative to the store prefix.
                       maxLength: 2048
                       type: string
                   required:
@@ -228,7 +227,7 @@ spec:
               observedVersion:
                 description: |-
                   observedVersion is a provider-specific version string
-                  (commit SHA for Git, ModifyIndex for Consul).
+                  (commit SHA for Git).
                 type: string
               syncedAt:
                 description: syncedAt is the timestamp of the last successful sync.

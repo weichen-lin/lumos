@@ -12,7 +12,7 @@ export interface ConfigDetail {
 	store: {
 		name: string;
 		type: "ConfigStore" | "ClusterConfigStore";
-		provider: "Git" | "Consul" | "Unknown";
+		provider: "Git" | "Unknown";
 	};
 	data: Array<{
 		source: string;

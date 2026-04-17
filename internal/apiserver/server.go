@@ -185,24 +185,18 @@ type eventEntry struct {
 }
 
 type configStoreDetailResp struct {
-	ID              string      `json:"id"`
-	Name            string      `json:"name"`
-	Type            string      `json:"type"`
-	Provider        string      `json:"provider"`
-	Namespace       string      `json:"namespace,omitempty"`
-	Git             *gitInfo    `json:"git,omitempty"`
-	Consul          *consulInfo `json:"consul,omitempty"`
-	ExternalConfigs []ecRef     `json:"externalConfigs"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Type            string   `json:"type"`
+	Provider        string   `json:"provider"`
+	Namespace       string   `json:"namespace,omitempty"`
+	Git             *gitInfo `json:"git,omitempty"`
+	ExternalConfigs []ecRef  `json:"externalConfigs"`
 }
 
 type gitInfo struct {
 	URL    string `json:"url"`
 	Branch string `json:"branch"`
-}
-
-type consulInfo struct {
-	Address string `json:"address"`
-	Prefix  string `json:"prefix"`
 }
 
 type ecRef struct {
@@ -407,9 +401,6 @@ func (s *Server) handleConfigStoreDetail(w http.ResponseWriter, r *http.Request)
 
 	if spec.Git != nil {
 		resp.Git = &gitInfo{URL: spec.Git.URL, Branch: spec.Git.Branch}
-	}
-	if spec.Consul != nil {
-		resp.Consul = &consulInfo{Address: spec.Consul.Address, Prefix: spec.Consul.Prefix}
 	}
 
 	// Find all ExternalConfigs that reference this store.
@@ -682,8 +673,7 @@ func (s *Server) handleConfigDashboardStats(w http.ResponseWriter, r *http.Reque
 	}
 
 	providerColors := map[string]string{
-		"Git":    "oklch(0.62 0.14 39.15)",
-		"Consul": "oklch(0.7 0.1 200)",
+		"Git": "oklch(0.62 0.14 39.15)",
 	}
 	providers := make([]providerStat, 0, len(providerCount))
 	for p, count := range providerCount {
