@@ -1,0 +1,126 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: configstores.sync.lumos.io
+spec:
+  group: sync.lumos.io
+  names:
+    kind: ConfigStore
+    listKind: ConfigStoreList
+    plural: configstores
+    singular: configstore
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.provider
+      name: Provider
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ConfigStore is the Schema for the configstores API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ConfigStoreSpec defines the desired state of ConfigStore.
+            properties:
+              consul:
+                description: consul configures the Consul backend. Required when provider
+                  is Consul.
+                properties:
+                  address:
+                    description: address of the Consul agent, e.g. "consul.default.svc:8500".
+                    type: string
+                  prefix:
+                    description: prefix is the KV path prefix to read from, e.g. "config/myapp".
+                    type: string
+                  secretRef:
+                    description: secretRef points to a Secret with key "token" for
+                      ACL auth.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                required:
+                - address
+                - prefix
+                type: object
+              git:
+                description: git configures the Git backend. Required when provider
+                  is Git.
+                properties:
+                  branch:
+                    default: main
+                    description: branch to track. Defaults to "main".
+                    type: string
+                  secretRef:
+                    description: |-
+                      secretRef points to a Secret containing credentials.
+                      For HTTPS: keys "username" and "password" (or "token").
+                      For SSH: key "sshPrivateKey".
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  url:
+                    description: url is the HTTPS or SSH URL of the repository.
+                    type: string
+                required:
+                - url
+                type: object
+                x-kubernetes-validations:
+                - message: secretRef is required when using an SSH URL (git@...)
+                  rule: '!self.url.startsWith(''git@'') || has(self.secretRef)'
+              provider:
+                description: provider selects the backend type for this store.
+                enum:
+                - Git
+                - Consul
+                type: string
+            required:
+            - provider
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources: {}
