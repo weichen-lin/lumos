@@ -1,4 +1,4 @@
-FROM oven/bun:1 AS frontend-builder
+FROM --platform=$BUILDPLATFORM oven/bun:1 AS frontend-builder
 WORKDIR /workspace/frontend
 
 COPY frontend/package.json frontend/bun.lock ./
@@ -7,8 +7,9 @@ RUN bun install --frozen-lockfile
 COPY frontend ./
 RUN bun run build
 
-# Build the manager binary. Keep this aligned with the Go version in go.mod.
-FROM golang:1.26 AS builder
+# Build the manager binary on the native runner platform, then cross-compile
+# to the requested target platform.
+FROM --platform=$BUILDPLATFORM golang:1.26 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
