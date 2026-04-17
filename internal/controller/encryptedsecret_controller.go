@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -30,7 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,11 +49,16 @@ import (
 // injection is race-free across concurrent reconciler goroutines.
 var sopsDecryptMu sync.Mutex
 
+const (
+	storeKindConfigStore        = "ConfigStore"
+	storeKindClusterConfigStore = "ClusterConfigStore"
+)
+
 // EncryptedSecretReconciler reconciles an EncryptedSecret object.
 type EncryptedSecretReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=sync.lumos.io,resources=encryptedsecrets,verbs=get;list;watch;update;patch
@@ -74,14 +80,14 @@ func (r *EncryptedSecretReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// 2. Resolve the referenced ConfigStore.
 	storeSpec, err := r.resolveESStoreSpec(ctx, &es)
 	if err != nil {
-		r.Recorder.Event(&es, corev1.EventTypeWarning, "StoreNotFound", err.Error())
+		r.recordEvent(&es, corev1.EventTypeWarning, "StoreNotFound", err.Error())
 		return r.esSetFailed(ctx, &es, "StoreNotFound", err.Error())
 	}
 
 	// 3. Build the Git provider.
 	gitProvider, err := r.buildGitProvider(ctx, &es, storeSpec)
 	if err != nil {
-		r.Recorder.Event(&es, corev1.EventTypeWarning, "ProviderError", err.Error())
+		r.recordEvent(&es, corev1.EventTypeWarning, "ProviderError", err.Error())
 		return r.esSetFailed(ctx, &es, "ProviderError", err.Error())
 	}
 
@@ -95,7 +101,7 @@ func (r *EncryptedSecretReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	rawFiles, commitSHA, err := gitProvider.FetchRaw(ctx, sources)
 	if err != nil {
 		log.Error(err, "failed to fetch encrypted files from git")
-		r.Recorder.Event(&es, corev1.EventTypeWarning, "FetchFailed", err.Error())
+		r.recordEvent(&es, corev1.EventTypeWarning, "FetchFailed", err.Error())
 		if statusErr := r.esMarkFailed(ctx, &es, "FetchFailed", err.Error()); statusErr != nil {
 			log.Error(statusErr, "failed to update status after fetch failure")
 		}
@@ -105,7 +111,7 @@ func (r *EncryptedSecretReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// 6. Read the age private key from the referenced K8s Secret.
 	ageKey, err := r.resolveAgeKey(ctx, &es)
 	if err != nil {
-		r.Recorder.Event(&es, corev1.EventTypeWarning, "AgeKeyError", err.Error())
+		r.recordEvent(&es, corev1.EventTypeWarning, "AgeKeyError", err.Error())
 		return r.esSetFailed(ctx, &es, "AgeKeyError", err.Error())
 	}
 
@@ -116,14 +122,14 @@ func (r *EncryptedSecretReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if decryptErr != nil {
 			msg := fmt.Sprintf("decrypting %q: %v", src, decryptErr)
 			log.Error(decryptErr, "sops decryption failed", "source", src)
-			r.Recorder.Event(&es, corev1.EventTypeWarning, "DecryptFailed", msg)
+			r.recordEvent(&es, corev1.EventTypeWarning, "DecryptFailed", msg)
 			if statusErr := r.esMarkFailed(ctx, &es, "DecryptFailed", msg); statusErr != nil {
 				log.Error(statusErr, "failed to update status after decrypt failure")
 			}
 			return ctrl.Result{RequeueAfter: es.Spec.RefreshInterval.Duration}, nil
 		}
 		if err := mergeSecretData(decrypted, secretData); err != nil {
-			r.Recorder.Event(&es, corev1.EventTypeWarning, "ParseFailed", err.Error())
+			r.recordEvent(&es, corev1.EventTypeWarning, "ParseFailed", err.Error())
 			return r.esSetFailed(ctx, &es, "ParseFailed", err.Error())
 		}
 	}
@@ -134,7 +140,7 @@ func (r *EncryptedSecretReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		targetName = es.Spec.Target.Name
 	}
 	if err := r.syncSecret(ctx, &es, targetName, secretData); err != nil {
-		r.Recorder.Event(&es, corev1.EventTypeWarning, "SyncFailed", err.Error())
+		r.recordEvent(&es, corev1.EventTypeWarning, "SyncFailed", err.Error())
 		return r.esSetFailed(ctx, &es, "SyncFailed", err.Error())
 	}
 
@@ -155,7 +161,7 @@ func (r *EncryptedSecretReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	msg := fmt.Sprintf("Synced %d key(s) to Secret %s", len(secretData), targetName)
-	r.Recorder.Event(&es, corev1.EventTypeNormal, "Synced", msg)
+	r.recordEvent(&es, corev1.EventTypeNormal, "Synced", msg)
 	log.Info("sync successful", "secret", targetName, "keys", len(secretData), "version", commitSHA)
 
 	// 10. Re-queue after the configured refresh interval.
@@ -182,6 +188,10 @@ func (r *EncryptedSecretReconciler) syncSecret(
 	return err
 }
 
+func (r *EncryptedSecretReconciler) recordEvent(es *syncv1alpha1.EncryptedSecret, eventType, reason, message string) {
+	r.Recorder.Eventf(es, nil, eventType, reason, reason, message)
+}
+
 // resolveESStoreSpec resolves the ConfigStore or ClusterConfigStore referenced by
 // the EncryptedSecret. Only the Git provider is supported.
 func (r *EncryptedSecretReconciler) resolveESStoreSpec(
@@ -190,7 +200,7 @@ func (r *EncryptedSecretReconciler) resolveESStoreSpec(
 ) (*syncv1alpha1.ConfigStoreSpec, error) {
 	ref := es.Spec.StoreRef
 	switch ref.Kind {
-	case "", "ConfigStore":
+	case "", storeKindConfigStore:
 		var store syncv1alpha1.ConfigStore
 		if err := r.Get(ctx, types.NamespacedName{
 			Name:      ref.Name,
@@ -199,7 +209,7 @@ func (r *EncryptedSecretReconciler) resolveESStoreSpec(
 			return nil, fmt.Errorf("ConfigStore %q not found: %w", ref.Name, err)
 		}
 		return &store.Spec, nil
-	case "ClusterConfigStore":
+	case storeKindClusterConfigStore:
 		var store syncv1alpha1.ClusterConfigStore
 		if err := r.Get(ctx, types.NamespacedName{Name: ref.Name}, &store); err != nil {
 			return nil, fmt.Errorf("ClusterConfigStore %q not found: %w", ref.Name, err)
@@ -316,7 +326,7 @@ func (r *EncryptedSecretReconciler) esMarkFailed(
 	es *syncv1alpha1.EncryptedSecret,
 	reason, message string,
 ) error {
-	logf.FromContext(ctx).Error(fmt.Errorf("%s", reason), message) //nolint:goerr113
+	logf.FromContext(ctx).Error(errors.New(reason), message)
 	apimeta.SetStatusCondition(&es.Status.Conditions, metav1.Condition{
 		Type:               "Ready",
 		Status:             metav1.ConditionFalse,
@@ -371,7 +381,7 @@ func (r *EncryptedSecretReconciler) encryptedSecretsForClusterStore(
 	}
 	var reqs []reconcile.Request
 	for _, es := range esList.Items {
-		if es.Spec.StoreRef.Kind == "ClusterConfigStore" {
+		if es.Spec.StoreRef.Kind == storeKindClusterConfigStore {
 			reqs = append(reqs, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: es.Name, Namespace: es.Namespace},
 			})
@@ -394,7 +404,7 @@ func (r *EncryptedSecretReconciler) encryptedSecretsForStore(
 	}
 	var reqs []reconcile.Request
 	for _, es := range esList.Items {
-		if es.Spec.StoreRef.Kind == "" || es.Spec.StoreRef.Kind == "ConfigStore" {
+		if es.Spec.StoreRef.Kind == "" || es.Spec.StoreRef.Kind == storeKindConfigStore {
 			reqs = append(reqs, reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: es.Name, Namespace: es.Namespace},
 			})

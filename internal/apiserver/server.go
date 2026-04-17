@@ -43,6 +43,15 @@ type Server struct {
 	addr   string
 }
 
+const (
+	storeKindConfigStore        = "ConfigStore"
+	storeKindClusterConfigStore = "ClusterConfigStore"
+	statusSynced                = "Synced"
+	statusError                 = "Error"
+	statusStale                 = "Stale"
+	conditionTypeReady          = "Ready"
+)
+
 // New creates a new Server. addr is the listen address, e.g. ":8090".
 func New(c client.Client, addr string) *Server {
 	return &Server{client: c, addr: addr}
@@ -85,7 +94,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 // spaHandler wraps a file server to support SPA client-side routing.
 // If a requested file doesn't exist, it serves index.html instead of a 404.
-func spaHandler(fileServer http.Handler, fs fs.FS) http.Handler {
+func spaHandler(fileServer http.Handler, staticFS fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// If it's an API request, don't fallback to index.html
 		if strings.HasPrefix(r.URL.Path, "/api") {
@@ -99,22 +108,24 @@ func spaHandler(fileServer http.Handler, fs fs.FS) http.Handler {
 			path = "index.html"
 		}
 
-		f, err := fs.Open(path)
+		f, err := staticFS.Open(path)
 		if err != nil {
 			// File doesn't exist, serve index.html for client-side routing
-			index, err := fs.Open("index.html")
+			index, err := staticFS.Open("index.html")
 			if err != nil {
 				http.Error(w, "index.html not found", http.StatusInternalServerError)
 				return
 			}
-			defer index.Close()
+			defer func() {
+				_ = index.Close()
+			}()
 
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
 			_, _ = io.Copy(w, index)
 			return
 		}
-		f.Close()
+		_ = f.Close()
 
 		fileServer.ServeHTTP(w, r)
 	})
@@ -306,7 +317,7 @@ func (s *Server) handleConfigStores(w http.ResponseWriter, r *http.Request) {
 	for _, ec := range ecList.Items {
 		kind := ec.Spec.StoreRef.Kind
 		if kind == "" {
-			kind = "ConfigStore"
+			kind = storeKindConfigStore
 		}
 		usage[kind+"/"+ec.Namespace+"/"+ec.Spec.StoreRef.Name]++
 	}
@@ -319,10 +330,10 @@ func (s *Server) handleConfigStores(w http.ResponseWriter, r *http.Request) {
 			UID:        string(st.UID),
 			ID:         st.Namespace + "--" + st.Name,
 			Name:       st.Name,
-			Type:       "ConfigStore",
+			Type:       storeKindConfigStore,
 			Provider:   string(st.Spec.Provider),
 			Namespace:  st.Namespace,
-			UsageCount: usage["ConfigStore/"+st.Namespace+"/"+st.Name],
+			UsageCount: usage[storeKindConfigStore+"/"+st.Namespace+"/"+st.Name],
 		})
 	}
 
@@ -332,9 +343,9 @@ func (s *Server) handleConfigStores(w http.ResponseWriter, r *http.Request) {
 			UID:        string(cs.UID),
 			ID:         cs.Name,
 			Name:       cs.Name,
-			Type:       "ClusterConfigStore",
+			Type:       storeKindClusterConfigStore,
 			Provider:   string(cs.Spec.Provider),
-			UsageCount: usage["ClusterConfigStore//"+cs.Name],
+			UsageCount: usage[storeKindClusterConfigStore+"//"+cs.Name],
 		})
 	}
 
@@ -368,7 +379,7 @@ func (s *Server) handleConfigStoreDetail(w http.ResponseWriter, r *http.Request)
 				resp = configStoreDetailResp{
 					ID:        st.Namespace + "--" + st.Name,
 					Name:      st.Name,
-					Type:      "ConfigStore",
+					Type:      storeKindConfigStore,
 					Provider:  string(st.Spec.Provider),
 					Namespace: st.Namespace,
 				}
@@ -386,7 +397,7 @@ func (s *Server) handleConfigStoreDetail(w http.ResponseWriter, r *http.Request)
 					resp = configStoreDetailResp{
 						ID:       cs.Name,
 						Name:     cs.Name,
-						Type:     "ClusterConfigStore",
+						Type:     storeKindClusterConfigStore,
 						Provider: string(cs.Spec.Provider),
 					}
 					break
@@ -415,13 +426,13 @@ func (s *Server) handleConfigStoreDetail(w http.ResponseWriter, r *http.Request)
 		ec := &ecList.Items[i]
 		kind := ec.Spec.StoreRef.Kind
 		if kind == "" {
-			kind = "ConfigStore"
+			kind = storeKindConfigStore
 		}
 		var matches bool
-		if resp.Type == "ClusterConfigStore" {
-			matches = kind == "ClusterConfigStore" && ec.Spec.StoreRef.Name == resp.Name
+		if resp.Type == storeKindClusterConfigStore {
+			matches = kind == storeKindClusterConfigStore && ec.Spec.StoreRef.Name == resp.Name
 		} else {
-			matches = kind == "ConfigStore" && ec.Spec.StoreRef.Name == resp.Name && ec.Namespace == resp.Namespace
+			matches = kind == storeKindConfigStore && ec.Spec.StoreRef.Name == resp.Name && ec.Namespace == resp.Namespace
 		}
 		if matches {
 			refs = append(refs, ecRef{
@@ -453,7 +464,7 @@ func (s *Server) handleExternalConfigs(w http.ResponseWriter, r *http.Request) {
 		ec := &ecList.Items[i]
 		storeKind := ec.Spec.StoreRef.Kind
 		if storeKind == "" {
-			storeKind = "ConfigStore"
+			storeKind = storeKindConfigStore
 		}
 		resp := externalConfigResp{
 			UID:         string(ec.UID),
@@ -567,9 +578,9 @@ func (s *Server) handleConfigDashboardStats(w http.ResponseWriter, r *http.Reque
 		provider := s.resolveProvider(ctx, ec)
 
 		switch status {
-		case "Synced":
+		case statusSynced:
 			summary.Synced++
-		case "Error":
+		case statusError:
 			summary.Error++
 		default:
 			summary.Stale++
@@ -581,16 +592,16 @@ func (s *Server) handleConfigDashboardStats(w http.ResponseWriter, r *http.Reque
 			nsMap[ns] = &namespaceHealth{Name: ns}
 		}
 		switch status {
-		case "Synced":
+		case statusSynced:
 			nsMap[ns].Synced++
-		case "Error":
+		case statusError:
 			nsMap[ns].Error++
 		default:
 			nsMap[ns].Stale++
 		}
 
 		evStatus := strings.ToLower(status)
-		if status == "Stale" {
+		if status == statusStale {
 			evStatus = "warning"
 		}
 		re := recentEvent{
@@ -615,9 +626,9 @@ func (s *Server) handleConfigDashboardStats(w http.ResponseWriter, r *http.Reque
 		provider := "Git" // EncryptedSecrets are always from Git stores currently
 
 		switch status {
-		case "Synced":
+		case statusSynced:
 			summary.Synced++
-		case "Error":
+		case statusError:
 			summary.Error++
 		default:
 			summary.Stale++
@@ -629,16 +640,16 @@ func (s *Server) handleConfigDashboardStats(w http.ResponseWriter, r *http.Reque
 			nsMap[ns] = &namespaceHealth{Name: ns}
 		}
 		switch status {
-		case "Synced":
+		case statusSynced:
 			nsMap[ns].Synced++
-		case "Error":
+		case statusError:
 			nsMap[ns].Error++
 		default:
 			nsMap[ns].Stale++
 		}
 
 		evStatus := strings.ToLower(status)
-		if status == "Stale" {
+		if status == statusStale {
 			evStatus = "warning"
 		}
 		re := recentEvent{
@@ -914,15 +925,15 @@ func (s *Server) readEvents(ctx context.Context, ec *syncv1alpha1.ExternalConfig
 func (s *Server) resolveProvider(ctx context.Context, ec *syncv1alpha1.ExternalConfig) string {
 	kind := ec.Spec.StoreRef.Kind
 	if kind == "" {
-		kind = "ConfigStore"
+		kind = storeKindConfigStore
 	}
 	switch kind {
-	case "ConfigStore":
+	case storeKindConfigStore:
 		var store syncv1alpha1.ConfigStore
 		if err := s.client.Get(ctx, client.ObjectKey{Namespace: ec.Namespace, Name: ec.Spec.StoreRef.Name}, &store); err == nil {
 			return string(store.Spec.Provider)
 		}
-	case "ClusterConfigStore":
+	case storeKindClusterConfigStore:
 		var store syncv1alpha1.ClusterConfigStore
 		if err := s.client.Get(ctx, client.ObjectKey{Name: ec.Spec.StoreRef.Name}, &store); err == nil {
 			return string(store.Spec.Provider)
@@ -971,25 +982,25 @@ func nextSyncTime(syncedAt *metav1.Time, interval metav1.Duration) *time.Time {
 	if syncedAt == nil {
 		return nil
 	}
-	v := syncedAt.Time.Add(interval.Duration)
+	v := syncedAt.Add(interval.Duration)
 	return &v
 }
 
 func deriveStatus(ec *syncv1alpha1.ExternalConfig) string {
 	for _, cond := range ec.Status.Conditions {
-		if cond.Type == "Ready" {
+		if cond.Type == conditionTypeReady {
 			if cond.Status == metav1.ConditionTrue {
-				return "Synced"
+				return statusSynced
 			}
-			return "Error"
+			return statusError
 		}
 	}
-	return "Stale"
+	return statusStale
 }
 
 func deriveMessage(ec *syncv1alpha1.ExternalConfig) string {
 	for _, cond := range ec.Status.Conditions {
-		if cond.Type == "Ready" && cond.Status == metav1.ConditionFalse {
+		if cond.Type == conditionTypeReady && cond.Status == metav1.ConditionFalse {
 			return cond.Message
 		}
 	}
@@ -998,19 +1009,19 @@ func deriveMessage(ec *syncv1alpha1.ExternalConfig) string {
 
 func deriveEncSecretStatus(es *syncv1alpha1.EncryptedSecret) string {
 	for _, cond := range es.Status.Conditions {
-		if cond.Type == "Ready" {
+		if cond.Type == conditionTypeReady {
 			if cond.Status == metav1.ConditionTrue {
-				return "Synced"
+				return statusSynced
 			}
-			return "Error"
+			return statusError
 		}
 	}
-	return "Stale"
+	return statusStale
 }
 
 func deriveEncSecretMessage(es *syncv1alpha1.EncryptedSecret) string {
 	for _, cond := range es.Status.Conditions {
-		if cond.Type == "Ready" && cond.Status == metav1.ConditionFalse {
+		if cond.Type == conditionTypeReady && cond.Status == metav1.ConditionFalse {
 			return cond.Message
 		}
 	}

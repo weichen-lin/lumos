@@ -33,7 +33,7 @@ func TestMain(m *testing.M) {
 
 	branch, err := setupTestRepo(dir)
 	if err != nil {
-		os.RemoveAll(dir)
+		_ = os.RemoveAll(dir)
 		panic(err)
 	}
 
@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
-	os.RemoveAll(dir)
+	_ = os.RemoveAll(dir)
 	os.Exit(code)
 }
 

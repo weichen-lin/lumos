@@ -2,6 +2,7 @@
 IMG ?= controller:latest
 BUN ?= bun
 FRONTEND_DIR ?= frontend
+GO_LINT_PKGS ?= ./api/... ./cmd/... ./internal/... ./frontend
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -94,11 +95,11 @@ cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 
 .PHONY: lint
 lint: golangci-lint frontend-check frontend-build ## Run Go and frontend lint/build checks.
-	"$(GOLANGCI_LINT)" run
+	"$(GOLANGCI_LINT)" run $(GO_LINT_PKGS)
 
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
-	"$(GOLANGCI_LINT)" run --fix
+	"$(GOLANGCI_LINT)" run --fix $(GO_LINT_PKGS)
 
 .PHONY: lint-config
 lint-config: golangci-lint ## Verify golangci-lint linter configuration

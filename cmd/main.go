@@ -186,7 +186,7 @@ func main() {
 	if err := (&controller.ExternalConfigReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("externalconfig-controller"),
+		Recorder: mgr.GetEventRecorder("externalconfig-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ExternalConfig")
 		os.Exit(1)
@@ -194,7 +194,7 @@ func main() {
 	if err := (&controller.EncryptedSecretReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("encryptedsecret-controller"),
+		Recorder: mgr.GetEventRecorder("encryptedsecret-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "EncryptedSecret")
 		os.Exit(1)

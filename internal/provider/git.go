@@ -120,7 +120,7 @@ func (g *GitProvider) Fetch(_ context.Context, data []syncv1alpha1.ExternalConfi
 			return FetchResult{}, fmt.Errorf("reading file %q: %w", d.Source, err)
 		}
 		content, err := io.ReadAll(reader)
-		reader.Close()
+		_ = reader.Close()
 		if err != nil {
 			return FetchResult{}, fmt.Errorf("reading file %q: %w", d.Source, err)
 		}
@@ -197,7 +197,7 @@ func (g *GitProvider) FetchRaw(_ context.Context, sources []string) (files map[s
 			return nil, "", fmt.Errorf("reading file %q: %w", src, readerErr)
 		}
 		raw, readErr := io.ReadAll(reader)
-		reader.Close()
+		_ = reader.Close()
 		if readErr != nil {
 			return nil, "", fmt.Errorf("reading file %q: %w", src, readErr)
 		}

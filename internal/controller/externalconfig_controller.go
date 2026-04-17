@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -25,7 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,7 +43,7 @@ import (
 type ExternalConfigReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=sync.lumos.io,resources=externalconfigs,verbs=get;list;watch;update;patch
@@ -65,14 +66,14 @@ func (r *ExternalConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// 2. Resolve the referenced ConfigStore or ClusterConfigStore.
 	storeSpec, err := r.resolveStoreSpec(ctx, &ec)
 	if err != nil {
-		r.Recorder.Event(&ec, corev1.EventTypeWarning, "StoreNotFound", err.Error())
+		r.recordEvent(&ec, corev1.EventTypeWarning, "StoreNotFound", err.Error())
 		return r.setFailed(ctx, &ec, "StoreNotFound", err.Error())
 	}
 
 	// 3. Build the provider from the store configuration.
 	p, err := r.buildProvider(ctx, &ec, storeSpec)
 	if err != nil {
-		r.Recorder.Event(&ec, corev1.EventTypeWarning, "ProviderError", err.Error())
+		r.recordEvent(&ec, corev1.EventTypeWarning, "ProviderError", err.Error())
 		return r.setFailed(ctx, &ec, "ProviderError", err.Error())
 	}
 
@@ -80,7 +81,7 @@ func (r *ExternalConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	fetchResult, err := p.Fetch(ctx, ec.Spec.Data)
 	if err != nil {
 		log.Error(err, "failed to fetch config from provider")
-		r.Recorder.Event(&ec, corev1.EventTypeWarning, "FetchFailed", err.Error())
+		r.recordEvent(&ec, corev1.EventTypeWarning, "FetchFailed", err.Error())
 		if statusErr := r.markFailed(ctx, &ec, "FetchFailed", err.Error()); statusErr != nil {
 			log.Error(statusErr, "failed to update status after fetch failure")
 		}
@@ -93,7 +94,7 @@ func (r *ExternalConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		cmName = ec.Spec.Target.Name
 	}
 	if err := r.syncConfigMap(ctx, &ec, cmName, fetchResult.Data); err != nil {
-		r.Recorder.Event(&ec, corev1.EventTypeWarning, "SyncFailed", err.Error())
+		r.recordEvent(&ec, corev1.EventTypeWarning, "SyncFailed", err.Error())
 		return r.setFailed(ctx, &ec, "SyncFailed", err.Error())
 	}
 
@@ -123,7 +124,7 @@ func (r *ExternalConfigReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	msg := fmt.Sprintf("Synced %d key(s) to ConfigMap %s", len(fetchResult.Data), cmName)
-	r.Recorder.Event(&ec, corev1.EventTypeNormal, "Synced", msg)
+	r.recordEvent(&ec, corev1.EventTypeNormal, "Synced", msg)
 
 	log.Info("sync successful",
 		"configmap", cmName,
@@ -156,6 +157,10 @@ func (r *ExternalConfigReconciler) syncConfigMap(
 		return ctrl.SetControllerReference(ec, cm, r.Scheme)
 	})
 	return err
+}
+
+func (r *ExternalConfigReconciler) recordEvent(ec *syncv1alpha1.ExternalConfig, eventType, reason, message string) {
+	r.Recorder.Eventf(ec, nil, eventType, reason, reason, message)
 }
 
 // resolveStoreSpec looks up the ConfigStore or ClusterConfigStore referenced by
@@ -241,7 +246,7 @@ func (r *ExternalConfigReconciler) markFailed(
 	ec *syncv1alpha1.ExternalConfig,
 	reason, message string,
 ) error {
-	logf.FromContext(ctx).Error(fmt.Errorf("%s", reason), message) //nolint:goerr113
+	logf.FromContext(ctx).Error(errors.New(reason), message)
 	ec.Status.KeyMappings = nil
 	apimeta.SetStatusCondition(&ec.Status.Conditions, metav1.Condition{
 		Type:               "Ready",

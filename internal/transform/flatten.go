@@ -53,7 +53,7 @@ func parseEnv(rawValue string) (map[string]string, error) {
 		var obj interface{}
 		if err := json.Unmarshal([]byte(trimmed), &obj); err == nil {
 			if _, ok := obj.(map[string]interface{}); !ok {
-				return nil, fmt.Errorf("Env format requires a JSON object at root, got array or scalar")
+				return nil, fmt.Errorf("env format requires a JSON object at root, got array or scalar")
 			}
 			result := make(map[string]string)
 			flattenValue("", obj, result, true) // Use UPPER_SNAKE_CASE for Env
