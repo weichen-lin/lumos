@@ -2,3 +2,6 @@
 
 # Development tools binaries
 bin/
+
+# Build output
+dist/
